@@ -19,7 +19,6 @@
   // Index where the placeholder (drop target) should appear (0..value.length)
   let insertIndex = $state(-1);
   let placeholderTop = $state(-1); // px offset of overlay bar within selected container
-  let selectedContainer: HTMLElement | null = null;
 
   // Which list is currently being hovered during drag (for visual highlight)
   let overList = $state<"none" | "available" | "selected">("none");
@@ -318,7 +317,7 @@
             {:else}
               {#each constraint.choices as task}
                 <div
-                  class="bg-surface-100-800 cursor-grab rounded-md p-3 shadow-sm transition-all hover:shadow-md active:cursor-grabbing"
+                  class="bg-surface-100-800 cursor-grab rounded-md p-3 shadow-sm ring-offset-2 ring-offset-surface-900 transition-all duration-150 hover:shadow-md active:cursor-grabbing"
                   class:ring-2={selectedAvailable.has(task)}
                   class:ring-secondary-400={selectedAvailable.has(task)}
                   draggable="true"
@@ -334,6 +333,7 @@
                       toggleAvailableSelection(task);
                     }
                   }}
+                  aria-grabbed={selectedAvailable.has(task) ? "true" : "false"}
                 >
                   <p class="text-sm">{task}</p>
                 </div>
@@ -363,7 +363,7 @@
             </h6>
             <div class="flex gap-1">
               <button
-                class="badge-icon preset-filled-secondary-100-900"
+                class="btn-icon preset-filled-secondary-100-900 transition-transform duration-150 hover:-translate-y-0.5"
                 type="button"
                 title="Move up"
                 onclick={() => moveChosen(-1)}
@@ -372,7 +372,7 @@
                 <IconArrowUp size={16} />
               </button>
               <button
-                class="badge-icon preset-filled-secondary-100-900"
+                class="btn-icon preset-filled-secondary-100-900 transition-transform duration-150 hover:translate-y-0.5"
                 type="button"
                 title="Move down"
                 onclick={() => moveChosen(1)}
@@ -385,7 +385,6 @@
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
             class="border-primary-300-600 bg-primary-50-900/20 relative flex min-h-[200px] flex-col gap-2 rounded-lg border-2 border-dashed p-3"
-            bind:this={selectedContainer}
             ondragover={(e) => handleContainerDragOver(e, "selected")}
             ondragleave={handleContainerDragLeave}
             ondrop={(e) => handleDrop(e)}
@@ -396,7 +395,7 @@
             <!-- overlay placeholder bar -->
             {#if draggedItem && placeholderTop !== -1}
               <div
-                class="pointer-events-none absolute right-0 left-0 h-2 rounded bg-primary-500/50"
+                class="dnd-bar absolute right-0 left-0"
                 style={`top: ${placeholderTop}px;`}
               ></div>
             {/if}
@@ -408,7 +407,7 @@
               {#each value as task, index}
                 <div
                   data-idx={index}
-                  class="group bg-primary-100-800 relative cursor-grab rounded-md p-3 shadow-sm transition-all hover:shadow-md active:cursor-grabbing"
+                  class="group bg-primary-100-800 relative cursor-grab rounded-md p-3 shadow-sm ring-offset-2 ring-offset-surface-900 transition-transform duration-150 hover:shadow-md active:cursor-grabbing"
                   class:ring-2={(draggedItem === task && draggedFromSelected) ||
                     selectedChosen.has(index)}
                   class:ring-primary-400={(draggedItem === task &&
@@ -420,6 +419,10 @@
                     e.preventDefault();
                   }}
                   onclick={() => toggleChosenSelection(index)}
+                  aria-grabbed={selectedChosen.has(index) ||
+                  (draggedItem === task && draggedFromSelected)
+                    ? "true"
+                    : "false"}
                   role="button"
                   tabindex="0"
                   onkeydown={(e) => {
@@ -460,3 +463,16 @@
     <p>No options available</p>
   {/if}
 </div>
+
+<style>
+  /* Stylish placeholder bar for drag-and-drop */
+  .dnd-bar {
+    height: 4px;
+    border-radius: 4px;
+    background: var(--color-primary-400, #7c3aed);
+    opacity: 0.85;
+    backdrop-filter: blur(1px);
+    transition: top 80ms ease;
+    pointer-events: none;
+  }
+</style>
