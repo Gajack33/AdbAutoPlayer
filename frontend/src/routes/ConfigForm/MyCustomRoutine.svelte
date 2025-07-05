@@ -102,14 +102,19 @@
     }
   }
 
-  function handleContainerDragOver(e: DragEvent, list: "available" | "selected") {
+  function handleContainerDragOver(
+    e: DragEvent,
+    list: "available" | "selected",
+  ) {
     handleDragOver(e);
     overList = list;
 
     // For selected list we calculate precise insertIndex even when hovering gaps
     if (list === "selected") {
       const container = e.currentTarget as HTMLElement;
-      const children = Array.from(container.querySelectorAll<HTMLElement>("[data-idx]"));
+      const children = Array.from(
+        container.querySelectorAll<HTMLElement>("[data-idx]"),
+      );
 
       // Default to end
       let newIndex = children.length;
@@ -173,7 +178,11 @@
       }
 
       const insertAt =
-        targetIndex !== undefined ? targetIndex : insertIndex !== -1 ? insertIndex : value.length;
+        targetIndex !== undefined
+          ? targetIndex
+          : insertIndex !== -1
+            ? insertIndex
+            : value.length;
       const newValue = [...value];
       newValue.splice(insertAt, 0, draggedItem);
       value = newValue;
@@ -238,7 +247,9 @@
       </div>
       <p>{taskDescription}</p>
 
-      <div class="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_auto_1fr] lg:items-start">
+      <div
+        class="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_auto_1fr] lg:items-start"
+      >
         <!-- Available Tasks Panel -->
         <div class="flex flex-col">
           <h6 class="text-surface-600-300 mb-3 text-sm font-semibold">
@@ -246,11 +257,11 @@
           </h6>
           <div
             class="border-surface-300-600 bg-surface-50-900 flex min-h-[200px] flex-col gap-2 rounded-lg border-2 border-dashed p-3"
-            ondragover={(e) => handleContainerDragOver(e, 'available')}
+            ondragover={(e) => handleContainerDragOver(e, "available")}
             ondragleave={handleContainerDragLeave}
             ondrop={handleDropOnAvailable}
-            class:ring-2={overList === 'available'}
-            class:ring-secondary-400={overList === 'available'}
+            class:ring-2={overList === "available"}
+            class:ring-secondary-400={overList === "available"}
             role="list"
           >
             {#if constraint.choices.length === 0}
@@ -271,7 +282,7 @@
                   tabindex="0"
                   title="Double-click to add, or drag to position"
                   onkeydown={(e) => {
-                    if (e.key === ' ' || e.key === 'Enter') {
+                    if (e.key === " " || e.key === "Enter") {
                       e.preventDefault();
                       toggleAvailableSelection(task);
                     }
@@ -327,11 +338,11 @@
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
             class="border-primary-300-600 bg-primary-50-900/20 flex min-h-[200px] flex-col gap-2 rounded-lg border-2 border-dashed p-3"
-            ondragover={(e) => handleContainerDragOver(e, 'selected')}
+            ondragover={(e) => handleContainerDragOver(e, "selected")}
             ondragleave={handleContainerDragLeave}
             ondrop={(e) => handleDrop(e)}
-            class:ring-2={overList === 'selected'}
-            class:ring-primary-400={overList === 'selected'}
+            class:ring-2={overList === "selected"}
+            class:ring-primary-400={overList === "selected"}
             role="list"
           >
             {#if value.length === 0}
@@ -347,8 +358,11 @@
                 <div
                   data-idx={index}
                   class="group bg-primary-100-800 relative cursor-grab rounded-md p-3 shadow-sm transition-all hover:shadow-md active:cursor-grabbing"
-                  class:ring-2={ (draggedItem === task && draggedFromSelected) || selectedChosen.has(task)}
-                  class:ring-primary-400={ (draggedItem === task && draggedFromSelected) || selectedChosen.has(task)}
+                  class:ring-2={(draggedItem === task && draggedFromSelected) ||
+                    selectedChosen.has(task)}
+                  class:ring-primary-400={(draggedItem === task &&
+                    draggedFromSelected) ||
+                    selectedChosen.has(task)}
                   draggable="true"
                   ondragstart={(e) => handleDragStart(e, task, true, index)}
                   ondragover={(e) => {
@@ -363,15 +377,19 @@
                   role="button"
                   tabindex="0"
                   onkeydown={(e) => {
-                    if (e.key === ' ' || e.key === 'Enter') {
+                    if (e.key === " " || e.key === "Enter") {
                       e.preventDefault();
                       toggleChosenSelection(task);
                     }
                   }}
                 >
-                  <div class="flex items-center justify-between gap-2 select-none">
+                  <div
+                    class="flex items-center justify-between gap-2 select-none"
+                  >
                     <div class="flex items-center gap-2">
-                      <span class="text-surface-500-400 text-base font-semibold">
+                      <span
+                        class="text-surface-500-400 text-base font-semibold"
+                      >
                         {index + 1}.
                       </span>
                       <p class="text-sm">{task}</p>
