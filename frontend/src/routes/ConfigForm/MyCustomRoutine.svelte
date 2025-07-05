@@ -15,17 +15,18 @@
 
   let draggedItem = $state<string | null>(null);
   let draggedFromSelected = $state(false);
-  let draggedIndex = $state(-1);
 
   // Index where the placeholder (drop target) should appear (0..value.length)
   let insertIndex = $state(-1);
+  let placeholderTop = $state(-1); // px offset of overlay bar within selected container
+  let selectedContainer: HTMLElement | null = null;
 
   // Which list is currently being hovered during drag (for visual highlight)
   let overList = $state<"none" | "available" | "selected">("none");
 
   // --- Selection state ---
   let selectedAvailable = $state<Set<string>>(new Set());
-  let selectedChosen = $state<Set<string>>(new Set());
+  let selectedChosen = $state<Set<number>>(new Set());
 
   function toggleAvailableSelection(task: string) {
     selectedChosen = new Set();
@@ -35,50 +36,40 @@
     selectedAvailable = newSet;
   }
 
-  function toggleChosenSelection(task: string) {
+  function toggleChosenSelection(index: number) {
     selectedAvailable = new Set();
     const newSet = new Set(selectedChosen);
-    if (newSet.has(task)) newSet.delete(task);
-    else newSet.add(task);
+    if (newSet.has(index)) newSet.delete(index);
+    else newSet.add(index);
     selectedChosen = newSet;
   }
 
   function moveSelectedToChosen() {
     if (selectedAvailable.size === 0) return;
-    const tasksToAdd = Array.from(selectedAvailable).filter(
-      (t) => !value.includes(t),
-    );
+    const tasksToAdd: string[] = Array.from(selectedAvailable);
     value = [...value, ...tasksToAdd];
     // reset selections
     selectedAvailable = new Set();
   }
 
-  function moveChosenUp() {
+  function moveChosen(offset: -1 | 1) {
     if (selectedChosen.size === 0) return;
-    const indices = value
-      .map((task, i) => (selectedChosen.has(task) ? i : -1))
-      .filter((i) => i !== -1)
-      .sort((a, b) => a - b);
-    if (indices[0] === 0) return;
-    const newArr = [...value];
-    for (const idx of indices) {
-      [newArr[idx - 1], newArr[idx]] = [newArr[idx], newArr[idx - 1]];
-    }
-    value = newArr;
-  }
 
-  function moveChosenDown() {
-    if (selectedChosen.size === 0) return;
-    const indices = value
-      .map((task, i) => (selectedChosen.has(task) ? i : -1))
-      .filter((i) => i !== -1)
-      .sort((a, b) => b - a);
-    if (indices[0] === value.length - 1) return;
+    const indices = Array.from(selectedChosen).sort((a, b) => a - b);
+    if (offset === -1 && indices[0] === 0) return;
+    if (offset === 1 && indices[indices.length - 1] === value.length - 1)
+      return;
+
+    // Ensure correct swap order (top-to-bottom for ↑, bottom-to-top for ↓)
+    const ordered = offset === -1 ? indices : [...indices].reverse();
     const newArr = [...value];
-    for (const idx of indices) {
-      [newArr[idx], newArr[idx + 1]] = [newArr[idx + 1], newArr[idx]];
+
+    for (const idx of ordered) {
+      [newArr[idx], newArr[idx + offset]] = [newArr[idx + offset], newArr[idx]];
     }
+
     value = newArr;
+    selectedChosen = new Set(indices.map((i) => i + offset));
   }
 
   function handleDragStart(
@@ -89,7 +80,19 @@
   ) {
     draggedItem = task;
     draggedFromSelected = fromSelected;
-    draggedIndex = index;
+
+    if (fromSelected) {
+      // If dragging an unselected item, make it the only selection
+      if (!selectedChosen.has(index)) {
+        selectedChosen = new Set([index]);
+      }
+    } else {
+      // If dragging an unselected item, make it the only selection
+      if (!selectedAvailable.has(task)) {
+        selectedAvailable = new Set([task]);
+      }
+    }
+
     if (e.dataTransfer) {
       e.dataTransfer.effectAllowed = fromSelected ? "move" : "copy";
     }
@@ -100,6 +103,7 @@
     if (e.dataTransfer) {
       e.dataTransfer.dropEffect = draggedFromSelected ? "move" : "copy";
     }
+    overList = "none";
   }
 
   function handleContainerDragOver(
@@ -118,64 +122,88 @@
 
       // Default to end
       let newIndex = children.length;
+      let newTop = container.scrollHeight; // default bottom
       for (const child of children) {
         const rect = child.getBoundingClientRect();
-        const midY = rect.top + rect.height / 2;
-        if (e.clientY < midY) {
-          newIndex = parseInt(child.dataset.idx!);
+        const idx = parseInt(child.dataset.idx!);
+        const upper = rect.top + rect.height * 0.35;
+        if (e.clientY < upper) {
+          newIndex = idx;
+          newTop = rect.top - container.getBoundingClientRect().top;
           break;
         }
       }
       insertIndex = newIndex;
+      // Clamp to container bounds to avoid bar going outside
+      const maxTop = container.clientHeight - 2; // bar height ~2px
+      placeholderTop = Math.min(Math.max(0, newTop), maxTop);
     }
   }
 
   function handleContainerDragLeave() {
     overList = "none";
+    insertIndex = -1; // Reset drop indicator
+    placeholderTop = -1;
   }
 
   // Drop on the available list removes the task from the selected list (if dragged from there)
   function handleDropOnAvailable(e: DragEvent) {
     e.preventDefault();
-    if (!draggedItem) return;
+    if (!draggedItem || !draggedFromSelected) return;
 
-    if (draggedFromSelected) {
-      value = value.filter((item) => item !== draggedItem);
-    }
+    // Remove all items that were in selectedChosen
+    const newSelectedValue = value.filter((_, i) => !selectedChosen.has(i));
+    value = newSelectedValue;
+    selectedChosen = new Set(); // Clear selection
 
     // reset state
     draggedItem = null;
     draggedFromSelected = false;
-    draggedIndex = -1;
     overList = "none";
   }
 
   function handleDrop(e: DragEvent, targetIndex?: number) {
     e.preventDefault();
-    if (!draggedItem) return;
+    if (!draggedItem) return; // Safety guard
 
     if (draggedFromSelected) {
-      // Moving within selected tasks
-      const target = targetIndex !== undefined ? targetIndex : insertIndex;
-      if (target !== -1 && draggedIndex !== -1) {
-        let newValue = [...value];
-        const [movedItem] = newValue.splice(draggedIndex, 1);
-        // Adjust target index if original item was before desired spot
-        const adjustedIndex = draggedIndex < target ? target - 1 : target;
-        newValue.splice(adjustedIndex, 0, movedItem);
-        value = newValue;
+      // --- Moving (reordering) within selected tasks ---
+      const indicesToMove = [...selectedChosen].sort((a, b) => a - b);
+      if (indicesToMove.length === 0) return;
+
+      const tasksToMove = indicesToMove.map((i) => value[i]);
+      const remainingTasks = value.filter((_, i) => !selectedChosen.has(i));
+
+      const dropIndex = targetIndex !== undefined ? targetIndex : insertIndex;
+      if (dropIndex === -1) {
+        // This can happen if dropping on the container but not on a specific item,
+        // it should append to the end of the list.
+        value = [...remainingTasks, ...tasksToMove];
+        const newSelection = new Set<number>(
+          tasksToMove.map((_, idx) => remainingTasks.length + idx),
+        );
+        selectedChosen = newSelection;
+      } else {
+        // Adjust drop index for the filtered array
+        const numMovedBeforeDrop = indicesToMove.filter(
+          (i) => i < dropIndex,
+        ).length;
+        const adjustedDropIndex = dropIndex - numMovedBeforeDrop;
+
+        // Insert the tasks
+        remainingTasks.splice(adjustedDropIndex, 0, ...tasksToMove);
+        value = remainingTasks;
+
+        // Update selection to the new positions of moved items
+        const newSelection = new Set<number>(
+          tasksToMove.map((_, idx) => adjustedDropIndex + idx),
+        );
+        selectedChosen = newSelection;
       }
     } else {
-      // Adding from available tasks
-      // Prevent duplicates
-      if (value.includes(draggedItem)) {
-        draggedItem = null;
-        draggedFromSelected = false;
-        draggedIndex = -1;
-        insertIndex = -1;
-        overList = "none";
-        return;
-      }
+      // --- Adding from available tasks ---
+      const tasksToAdd = [...selectedAvailable];
+      if (tasksToAdd.length === 0) return;
 
       const insertAt =
         targetIndex !== undefined
@@ -183,31 +211,50 @@
           : insertIndex !== -1
             ? insertIndex
             : value.length;
+
       const newValue = [...value];
-      newValue.splice(insertAt, 0, draggedItem);
+      newValue.splice(insertAt, 0, ...tasksToAdd);
       value = newValue;
+
+      // Update selection to the new positions of added items
+      const newSelection = new Set<number>(
+        tasksToAdd.map((_, idx) => insertAt + idx),
+      );
+      selectedChosen = newSelection;
+
+      // Clear the selection from the available list
+      selectedAvailable = new Set();
     }
 
     // Reset visual helpers and drag state AFTER the drop is handled
     draggedItem = null;
     draggedFromSelected = false;
-    draggedIndex = -1;
-    insertIndex = -1;
     overList = "none";
+    insertIndex = -1;
+    placeholderTop = -1;
   }
 
   function removeTask(index: number) {
     value = value.filter((_, i) => i !== index);
+    const newSelection = new Set<number>();
+    for (const sel of selectedChosen) {
+      if (sel < index) {
+        newSelection.add(sel);
+      } else if (sel > index) {
+        newSelection.add(sel - 1);
+      }
+    }
+    selectedChosen = newSelection;
   }
 
   function clearList() {
     if (confirm("Are you sure you want to clear all tasks?")) {
       value = [];
+      selectedChosen = new Set();
     }
   }
 
   function addTask(task: string) {
-    if (value.includes(task)) return; // avoid duplicates
     value = [...value, task];
   }
 
@@ -319,7 +366,7 @@
                 class="badge-icon preset-filled-secondary-100-900"
                 type="button"
                 title="Move up"
-                onclick={moveChosenUp}
+                onclick={() => moveChosen(-1)}
                 disabled={selectedChosen.size === 0}
               >
                 <IconArrowUp size={16} />
@@ -328,7 +375,7 @@
                 class="badge-icon preset-filled-secondary-100-900"
                 type="button"
                 title="Move down"
-                onclick={moveChosenDown}
+                onclick={() => moveChosen(1)}
                 disabled={selectedChosen.size === 0}
               >
                 <IconArrowDown size={16} />
@@ -337,7 +384,8 @@
           </div>
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
-            class="border-primary-300-600 bg-primary-50-900/20 flex min-h-[200px] flex-col gap-2 rounded-lg border-2 border-dashed p-3"
+            class="border-primary-300-600 bg-primary-50-900/20 relative flex min-h-[200px] flex-col gap-2 rounded-lg border-2 border-dashed p-3"
+            bind:this={selectedContainer}
             ondragover={(e) => handleContainerDragOver(e, "selected")}
             ondragleave={handleContainerDragLeave}
             ondrop={(e) => handleDrop(e)}
@@ -345,41 +393,39 @@
             class:ring-primary-400={overList === "selected"}
             role="list"
           >
+            <!-- overlay placeholder bar -->
+            {#if draggedItem && placeholderTop !== -1}
+              <div
+                class="pointer-events-none absolute right-0 left-0 h-2 rounded bg-primary-500/50"
+                style={`top: ${placeholderTop}px;`}
+              ></div>
+            {/if}
             {#if value.length === 0}
               <p class="text-surface-400-500 text-center text-sm">
                 Drag actions here to add them
               </p>
             {:else}
               {#each value as task, index}
-                {#if insertIndex === index}
-                  <!-- Placeholder line indicating drop position -->
-                  <div class="h-2 w-full rounded bg-primary-500/50"></div>
-                {/if}
                 <div
                   data-idx={index}
                   class="group bg-primary-100-800 relative cursor-grab rounded-md p-3 shadow-sm transition-all hover:shadow-md active:cursor-grabbing"
                   class:ring-2={(draggedItem === task && draggedFromSelected) ||
-                    selectedChosen.has(task)}
+                    selectedChosen.has(index)}
                   class:ring-primary-400={(draggedItem === task &&
                     draggedFromSelected) ||
-                    selectedChosen.has(task)}
+                    selectedChosen.has(index)}
                   draggable="true"
                   ondragstart={(e) => handleDragStart(e, task, true, index)}
                   ondragover={(e) => {
                     e.preventDefault();
-                    e.stopPropagation();
-                    const target = e.currentTarget as HTMLElement;
-                    const rect = target.getBoundingClientRect();
-                    const offsetY = e.clientY - rect.top;
-                    insertIndex = offsetY < rect.height / 2 ? index : index + 1;
                   }}
-                  onclick={() => toggleChosenSelection(task)}
+                  onclick={() => toggleChosenSelection(index)}
                   role="button"
                   tabindex="0"
                   onkeydown={(e) => {
                     if (e.key === " " || e.key === "Enter") {
                       e.preventDefault();
-                      toggleChosenSelection(task);
+                      toggleChosenSelection(index);
                     }
                   }}
                 >
@@ -405,10 +451,6 @@
                   <input type="hidden" {name} value={task} />
                 </div>
               {/each}
-              {#if insertIndex === value.length}
-                <!-- Placeholder at end of list -->
-                <div class="h-2 w-full rounded bg-primary-500/50"></div>
-              {/if}
             {/if}
           </div>
         </div>
