@@ -235,15 +235,12 @@
 
   function removeTask(index: number) {
     value = value.filter((_, i) => i !== index);
-    const newSelection = new Set<number>();
-    for (const sel of selectedChosen) {
-      if (sel < index) {
-        newSelection.add(sel);
-      } else if (sel > index) {
-        newSelection.add(sel - 1);
-      }
-    }
-    selectedChosen = newSelection;
+
+    selectedChosen = new Set(
+      [...selectedChosen]
+        .filter((i) => i !== index) // drop the removed item if it was selected
+        .map((i) => (i > index ? i - 1 : i)), // shift indices after the removed spot
+    );
   }
 
   function clearList() {
@@ -298,11 +295,22 @@
       >
         <!-- Available Tasks Panel -->
         <div class="flex flex-col">
-          <h6 class="text-surface-600-300 mb-3 text-sm font-semibold">
-            Available Actions (Drag or double-click to add)
-          </h6>
+          <div class="mb-3 flex items-center justify-between">
+            <h6 class="text-surface-600-300 text-sm font-semibold">
+              Available Actions (Drag or double-click to add)
+            </h6>
+            <!-- invisible placeholder to match height of Up/Down buttons on right panel -->
+            <div class="invisible flex gap-1">
+              <button class="btn-icon preset-filled-secondary-100-900"
+                ><IconArrowUp size={16} /></button
+              >
+              <button class="btn-icon preset-filled-secondary-100-900"
+                ><IconArrowDown size={16} /></button
+              >
+            </div>
+          </div>
           <div
-            class="border-surface-300-600 bg-surface-50-900 flex min-h-[200px] flex-col gap-2 rounded-lg border-2 border-dashed p-3"
+            class="bg-surface-50-900 flex min-h-[200px] flex-col gap-2 rounded-lg border border-white/20 p-3"
             ondragover={(e) => handleContainerDragOver(e, "available")}
             ondragleave={handleContainerDragLeave}
             ondrop={handleDropOnAvailable}
@@ -384,7 +392,7 @@
           </div>
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
-            class="border-primary-300-600 bg-primary-50-900/20 relative flex min-h-[200px] flex-col gap-2 rounded-lg border-2 border-dashed p-3"
+            class="bg-primary-50-900/10 relative flex min-h-[200px] flex-col gap-2 rounded-lg border border-white/20 p-3"
             ondragover={(e) => handleContainerDragOver(e, "selected")}
             ondragleave={handleContainerDragLeave}
             ondrop={(e) => handleDrop(e)}
@@ -395,7 +403,7 @@
             <!-- overlay placeholder bar -->
             {#if draggedItem && placeholderTop !== -1}
               <div
-                class="dnd-bar absolute right-0 left-0"
+                class="pointer-events-none absolute right-0 left-0 h-1.5 rounded bg-primary-400/80 transition-all duration-75"
                 style={`top: ${placeholderTop}px;`}
               ></div>
             {/if}
@@ -446,7 +454,10 @@
                     <button
                       class="badge-icon preset-filled-error-100-900 opacity-0 transition-opacity group-hover:opacity-100 hover:preset-filled-error-500"
                       type="button"
-                      onclick={() => removeTask(index)}
+                      onclick={(e) => {
+                        e.stopPropagation();
+                        removeTask(index);
+                      }}
                     >
                       <IconX size={16} />
                     </button>
@@ -463,16 +474,3 @@
     <p>No options available</p>
   {/if}
 </div>
-
-<style>
-  /* Stylish placeholder bar for drag-and-drop */
-  .dnd-bar {
-    height: 4px;
-    border-radius: 4px;
-    background: var(--color-primary-400, #7c3aed);
-    opacity: 0.85;
-    backdrop-filter: blur(1px);
-    transition: top 80ms ease;
-    pointer-events: none;
-  }
-</style>
